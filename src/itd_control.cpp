@@ -53,7 +53,6 @@
 #include <visp_naoqi/vpNaoqiRobot.h>
 
 
-
 const std::string currentDateTime() {
     time_t     now = time(0);
     struct tm  tstruct;
@@ -76,7 +75,6 @@ double getITD(const mat stereoSignal, float d_microphone, int freq){
  else
      return (tau_grid[0]);
  }
-
 
 /*!
 
@@ -113,6 +111,8 @@ int main(int argc, const char* argv[])
         proxy.call<void >("start");
 
 
+
+
         std::string jointName;
 
         if (robot.getRobotType() == vpNaoqiRobot::Pepper)
@@ -125,7 +125,7 @@ int main(int argc, const char* argv[])
             return 0;
         }
 
-        bool servoing = true ;
+        bool servoing = true;
 
         // Define values
         //float lambda = 0.03;
