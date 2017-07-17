@@ -54,27 +54,27 @@
 
 
 const std::string currentDateTime() {
-    time_t     now = time(0);
-    struct tm  tstruct;
-    char       buf[80];
-    tstruct = *localtime(&now);
-    // Visit http://en.cppreference.com/w/cpp/chrono/c/strftime
-    // for more information about date/time format
-    strftime(buf, sizeof(buf), "%Y-%m-%d_%H.%M.%S", &tstruct);
+  time_t     now = time(0);
+  struct tm  tstruct;
+  char       buf[80];
+  tstruct = *localtime(&now);
+  // Visit http://en.cppreference.com/w/cpp/chrono/c/strftime
+  // for more information about date/time format
+  strftime(buf, sizeof(buf), "%Y-%m-%d_%H.%M.%S", &tstruct);
 
-    return buf;
+  return buf;
 }
 
 double getITD(const mat stereoSignal, float d_microphone, int freq){
 
- BSSlocate bss(stereoSignal, d_microphone,freq);
- vec tau_grid= bss.compute();
- vec crossCorr=bss.getCC();
- if (fabs(min(crossCorr)>0.5)) // too uncertain measurements(probably spurious): tau<- previous tau
-      return -1;
- else
-     return (tau_grid[0]);
- }
+  BSSlocate bss(stereoSignal, d_microphone,freq);
+  vec tau_grid= bss.compute();
+  vec crossCorr=bss.getCC();
+  if (fabs(min(crossCorr)>0.5)) // too uncertain measurements(probably spurious): tau<- previous tau
+    return -1;
+  else
+    return (tau_grid[0]);
+}
 
 /*!
 
@@ -90,213 +90,148 @@ double getITD(const mat stereoSignal, float d_microphone, int freq){
  */
 int main(int argc, const char* argv[])
 {
-    try
+  try
+  {
+    std::string opt_ip = "198.18.0.1";;
+    if (argc == 3) {
+      if (std::string(argv[1]) == "--ip")
+        opt_ip = argv[2];
+    }
+
+    vpNaoqiRobot robot;
+    if (! opt_ip.empty()) {
+      std::cout << "Connect to robot with ip address: " << opt_ip << std::endl;
+      robot.setRobotIp(opt_ip);
+    }
+
+    robot.open();
+
+    std::string jointName;
+
+    if (robot.getRobotType() == vpNaoqiRobot::Pepper)
+      jointName = "HeadYaw";
+    else if (robot.getRobotType() == vpNaoqiRobot::Romeo)
+      jointName = "NeckYaw";
+    else
     {
-        std::string opt_ip = "198.18.0.1";;
-        if (argc == 3) {
-            if (std::string(argv[1]) == "--ip")
-                opt_ip = argv[2];
-        }
+      std::cout << "Type of robot not valid" << std::endl;
+      return 0;
+    }
 
-        vpNaoqiRobot robot;
-        if (! opt_ip.empty()) {
-            std::cout << "Connect to robot with ip address: " << opt_ip << std::endl;
-            robot.setRobotIp(opt_ip);
-        }
+    bool servoing = true;
 
-        robot.open();
-        qi::SessionPtr session = qi::makeSession();
-        session->connect("tcp://192.168.0.24:9559");
-        qi::AnyObject proxy = session->service("pepper_control");
-        proxy.call<void >("start");
+    // Define values
+    //float lambda = 0.03;
+    float lambda = 1.5; // 0.050;
+    mat recordS;
+    vpColVector vel(1);
+    AL::ALMemoryProxy memProxy(opt_ip, 9559);
 
+    vpImage<unsigned char> I(320, 320);
+    vpDisplayX dd(I);
+    vpDisplay::setTitle(I, "ViSP viewer");
 
+    vpPlot plotter(3, 250*2, 500*2, 100, 200, "Real time curves plotter");
+    plotter.initGraph(0, 1);
+    plotter.initGraph(1, 1);
+    plotter.initGraph(2, 1);
+    plotter.setTitle(0,  "C");
+    plotter.setTitle(1,  "Velocity");
+    plotter.setTitle(2,  "Cross-Correlation");
 
+    std::vector<float> vel_ (2);
+    std::vector<std::string> names = robot.getBodyNames("Head");
+    vpMatrix L;
+    unsigned long loop_iter = 0;
+    double tau=0;
+    double tauStar=0;
+    double oldtau=0;
+    int fs=16000;
+    float d_micro=0.1;
+    float c=343.;
+    float A=d_micro/c;
+    float ell=1;
+    double t;
+    while (1)
+    {
+      std::cout << "----------------------------------" << std::endl;
+      t = vpTime::measureTimeMs();
+      std::vector<float> left_= memProxy.getData("ALSoundProcessing/leftVec");
+      std::vector<float> right_= memProxy.getData("ALSoundProcessing/rightVec");
+      mat stereoSignal=zeros(2,right_.size());
+      for(int i=0;i<left_.size();i++){
+        stereoSignal(0,i)=left_[i];
+        stereoSignal(1,i)=right_[i];
+      }
 
-        std::string jointName;
+      //std::cout << "stereoSignal:" << stereoSignal << std::endl;
+      tau=getITD( stereoSignal.transpose(), d_micro, fs);
+      if (tau==-1)
+        tau=oldtau;
+      else
+        oldtau=tau;
+      /*Interaction matrix*/
+      L.resize(1,6);
+      L[0][0]=-(A*A-tau*tau)/(A*ell);
+      L[0][1]=tau*sqrt(A*A-tau*tau)/(A*ell);
+      L[0][5]=sqrt(A*A-tau*tau);
 
+      std::cout << "ITD: " << tau << std::endl;
+
+      // Compute Interaction matrix
+
+      //std::cout << "Loop time_Mat: " << vpTime::measureTimeMs() - t << " ms" << std::endl;
+      //std::cout << "matrix:" << L << std::endl;
+      //Compute joint velocity NeckYaw: Head only
+      vel[0] = -lambda* 1./L[0][5]*(tau-tauStar);
+
+      vel_[0] = -vel[0];
+
+      plotter.plot(0, 0, loop_iter, tau);
+      plotter.plot(1, 0, loop_iter,vel[0]);
+
+      std::cout << "vel: " << vel << std::endl;
+
+      if (servoing)
+      {
         if (robot.getRobotType() == vpNaoqiRobot::Pepper)
-            jointName = "HeadYaw";
+          robot.setVelocity(names, vel_);
         else if (robot.getRobotType() == vpNaoqiRobot::Romeo)
-            jointName = "NeckYaw";
-        else
-        {
-            std::cout << "Type of robot not valid" << std::endl;
-            return 0;
-        }
+          robot.setVelocity(jointName, vel);
+      }
 
-        bool servoing = true;
+      // Save current values
+      loop_iter ++;
+      std::cout << "Loop time_tot: " << vpTime::measureTimeMs() - t << " ms" << std::endl;
 
-        // Define values
-        //float lambda = 0.03;
-        float lambda = 1.5; // 0.050;
-        mat recordS;
-         vpColVector vel(1);
-        float oldV=0;
-        AL::ALMemoryProxy memProxy(opt_ip, 9559);
-
-        vpImage<unsigned char> I(320, 320);
-        vpDisplayX dd(I);
-        vpDisplay::setTitle(I, "ViSP viewer");
-
-
-        vpPlot plotter(3, 250*2, 500*2, 100, 200, "Real time curves plotter");
-        plotter.initGraph(0, 1);
-        plotter.initGraph(1, 1);
-        plotter.initGraph(2, 1);
-        //plotter_eyes.initGraph(2, 1);
-        //plotter_eyes.initGraph(3, 1);
-        plotter.setTitle(0,  "C");
-        plotter.setTitle(1,  "Velocity");
-        plotter.setTitle(2,  "Cross-Correlation");
-        //plotter_eyes.setTitle(2,  "REyeYaw");
-        //plotter_eyes.setTitle(3,  "REyePitch");
-
-
-        //vpPlot plotter_e (1);
-        //plotter_e.initGraph(0, 2);
-
-        //plotter_e.setLegend(0, 0, "Right");
-        //plotter_e.setLegend(0, 1, "Left");
-
-        //plotter_e.setTitle(0,  "Energy");
-
-
-        //vpPlot plotter_vel (1);
-        //plotter_vel.initGraph(0, 1);
-        //plotter_vel.setTitle(0,  "HeadYaw");
-
-
-
-        std::vector<float> vel_ (2);
-        std::vector<std::string> names = robot.getBodyNames("Head");
-        vpMatrix L;
-        unsigned long loop_iter = 0;
-        double tau=0;
-        double tauStar=0;
-        double oldtau=0;
-        int fs=16000;
-        float d_micro=0.1;
-        float c=343.;
-        float A=d_micro/c;
-        float ell=1;
-        double t;
-        while (1)
-        {
-            std::cout << "----------------------------------" << std::endl;
-            t = vpTime::measureTimeMs();
-            std::vector<float> left_= memProxy.getData("ALSoundProcessing/leftVec");
-            std::vector<float> right_= memProxy.getData("ALSoundProcessing/rightVec");
-            mat stereoSignal=zeros(2,right_.size());
-            for(int i=0;i<left_.size();i++){
-                stereoSignal(0,i)=left_[i];
-                stereoSignal(1,i)=right_[i];
-            }
-
-            //std::cout << "stereoSignal:" << stereoSignal << std::endl;
-            tau=getITD( stereoSignal.transpose(), d_micro, fs);
-            if (tau==-1)
-                tau=oldtau;
-            else
-                oldtau=tau;
-            /*Interaction matrix*/
-            L.resize(1,6);
-            L[0][0]=-(A*A-tau*tau)/(A*ell);
-            L[0][1]=tau*sqrt(A*A-tau*tau)/(A*ell);
-            L[0][5]=sqrt(A*A-tau*tau);
-
-            //C=exp.getTauMax();
-            /*if(oldC==-1000)
-                oldC=C;
-            else{
-                if(abs(oldC-C)>20)
-                     C=oldC;
-                else
-                    oldC=C;
-            }*/
-           std::cout << "ITD: " << tau << std::endl;
-
-            // Compute Interaction matrix
-
-            //std::cout << "Loop time_Mat: " << vpTime::measureTimeMs() - t << " ms" << std::endl;
-             std::cout << "matrix:" << L << std::endl;
-            // float sound_detected = memProxy.getData("ALSoundProcessing/soundDetectedEnergy");
-
-
-
-            //plotter.plot(0, 1, loop_iter, kalman.Xest[0]);
-            //   ratio = kalman.Xest[0];
-
-
-
-
-            //lambda = 0.42+0.17* log(1+abs(C));
-            //Compute joint velocity NeckYaw: Head only
-            vel[0] = -lambda* 1./L[0][5]*(tau-tauStar);
-
-            vel_[0] = -vel[0];
-
-            plotter.plot(0, 0, loop_iter, tau);
-            plotter.plot(1, 0, loop_iter,vel[0]);
-           /* plotter.resetPointList(2);
-            for(int i =0;i<r.getRows();i++)
-                plotter.plot(2, i, r.getRow(i).t());*/
-
-
-
-
-            std::cout << "vel: " << vel << std::endl;
-
-            if (servoing)
-            {
-                if (robot.getRobotType() == vpNaoqiRobot::Pepper)
-                    proxy.async<void >("setDesJointVelocity", names, vel_ );
-                else if (robot.getRobotType() == vpNaoqiRobot::Romeo)
-                    robot.setVelocity(jointName, vel);
-            }
-
-
-            // Save current values
-            loop_iter ++;
-std::cout << "Loop time_tot: " << vpTime::measureTimeMs() - t << " ms" << std::endl;
-
-
-
-            if (vpDisplay::getClick(I, false))
-                break;
-        }
-
-
-        //   plotter->saveData(0, "ratio.dat");
-
-
-        if (robot.getRobotType() == vpNaoqiRobot::Pepper)
-        {
-            proxy.call<void>("stopJoint");
-
-            proxy.call<void>("stop");
-        }
-        else if (robot.getRobotType() == vpNaoqiRobot::Romeo)
-            robot.stop(jointName);
-
-        vpDisplay::getClick(I, true);
-        plotter.saveData(0, "itdDense_C.dat");
-        plotter.saveData(1, "itdDense_vel.dat");
-        misc::writemat("itdDense_corr.dat", recordS.transpose());
-
-
-
+      if (vpDisplay::getClick(I, false))
+        break;
     }
-    catch (const vpException &e)
+
+    //   plotter->saveData(0, "ratio.dat");
+
+    if (robot.getRobotType() == vpNaoqiRobot::Pepper)
     {
-        std::cerr << "Caught exception: " << e.what() << std::endl;
+      robot.stop(jointName);
+      robot.stopPepperControl();
     }
-    catch (const AL::ALError &e)
-    {
-        std::cerr << "Caught exception: " << e.what() << std::endl;
-    }
+    else if (robot.getRobotType() == vpNaoqiRobot::Romeo)
+      robot.stop(jointName);
 
+    vpDisplay::getClick(I, true);
+    //plotter.saveData(0, "itdDense_C.dat");
+    //plotter.saveData(1, "itdDense_vel.dat");
+    //misc::writemat("itdDense_corr.dat", recordS.transpose());
 
+  }
+  catch (const vpException &e)
+  {
+    std::cerr << "Caught exception: " << e.what() << std::endl;
+  }
+  catch (const AL::ALError &e)
+  {
+    std::cerr << "Caught exception: " << e.what() << std::endl;
+  }
 
-    return 0;
+  return 0;
 }
