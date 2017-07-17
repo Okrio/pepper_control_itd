@@ -16,5 +16,7 @@
 
 
 ## Usage
+$ `$ /home/aly/workspace/romeo_sound_processing/build-toolchain_romeo`
+$ `$./sdk/bin/soundprocessing --pip 192.168.0.24 --pport 9559`
+$ `./sdk/bin/itd_control --ip 192.168.0.24`
 
-$  ./sdk/bin/soundprocessing --pip $PEPPER_IP --pport 9559
