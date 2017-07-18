@@ -1,7 +1,5 @@
 #include "misc.h"
 
-
-
 void misc::writevec(const std::string &filename, const vec & data){
 
     ofstream myfile (filename.c_str());

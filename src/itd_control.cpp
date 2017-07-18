@@ -36,13 +36,10 @@
  *
  *****************************************************************************/
 
-/*! \example speech_recognition.cpp */
 #include <iostream>
 #include <string>
-#include "./robot/BSSLocate/BSSlocate.h"
-#include "./robot/Misc/misc.h"
 
-#include <alproxies/almemoryproxy.h>
+//#include <alproxies/almemoryproxy.h>
 #include <qi/session.hpp>
 #include <qi/applicationsession.hpp>
 #include <qi/anymodule.hpp>
@@ -51,6 +48,9 @@
 #include <visp/vpDisplayX.h>
 
 #include <visp_naoqi/vpNaoqiRobot.h>
+
+#include "./robot/BSSLocate/BSSlocate.h"
+#include "./robot/Misc/misc.h"
 
 
 const std::string currentDateTime() {
@@ -65,6 +65,26 @@ const std::string currentDateTime() {
   return buf;
 }
 
+std::vector<float> fromAnyValueToFloatVector(qi::AnyValue& value){
+  qi::AnyReferenceVector anyrefs = value.asListValuePtr();
+  std::vector<float> result;
+
+  for(int i=0; i<anyrefs.size();i++)
+  {
+    try
+    {
+      result.push_back(anyrefs[i].content().toFloat());
+    }
+    catch(std::runtime_error& e)
+    {
+      result.push_back(-1.0);
+      std::cout << e.what() << "=> set to -1" << std::endl;
+    }
+  }
+  return result;
+}
+
+
 double getITD(const mat stereoSignal, float d_microphone, int freq){
 
   BSSlocate bss(stereoSignal, d_microphone,freq);
@@ -76,47 +96,44 @@ double getITD(const mat stereoSignal, float d_microphone, int freq){
     return (tau_grid[0]);
 }
 
-/*!
-
-   Connect toRomeo robot, and apply some motion.
-   By default, this example connect to a robot with ip address: 198.18.0.1.
-   If you want to connect on an other robot, run:
-
-   ./motion --ip <robot ip address>
-
-   Example:
-
-   ./motion --ip 169.254.168.230
- */
 int main(int argc, const char* argv[])
 {
   try
   {
-    std::string opt_ip = "198.18.0.1";;
-    if (argc == 3) {
-      if (std::string(argv[1]) == "--ip")
-        opt_ip = argv[2];
-    }
+    std::string opt_ip = "192.168.0.24";
+    bool opt_language_english = true;
+    int opt_cam = 0;
+    bool opt_record = true;
 
-    vpNaoqiRobot robot;
+    for (unsigned int i=0; i<argc; i++) {
+      if (std::string(argv[i]) == "--ip")
+        opt_ip = argv[i+1];
+      else if (std::string(argv[i]) == "--help") {
+        std::cout << "Usage: " << argv[0] << "[--ip <robot address>] [--help]" << std::endl;
+        return 0;
+      }
+     }
+
+    // Connection to module to control Pepper in velocity
+    qi::SessionPtr session = qi::makeSession();
+    std::string ip_port = "tcp://" + opt_ip + ":9559";
+    session->connect(ip_port);
     if (! opt_ip.empty()) {
       std::cout << "Connect to robot with ip address: " << opt_ip << std::endl;
-      robot.setRobotIp(opt_ip);
     }
 
+    // Connect to the robot
+    vpNaoqiRobot robot(session);
     robot.open();
+
+    if (robot.getRobotType() != vpNaoqiRobot::Pepper) {
+      std::cout << "ERROR: You are not connected to Pepper, but to a different Robot. Check the IP. " << std::endl;
+      return 0;
+    }
 
     std::string jointName;
 
-    if (robot.getRobotType() == vpNaoqiRobot::Pepper)
-      jointName = "HeadYaw";
-    else if (robot.getRobotType() == vpNaoqiRobot::Romeo)
-      jointName = "NeckYaw";
-    else
-    {
-      std::cout << "Type of robot not valid" << std::endl;
-      return 0;
-    }
+    jointName = "HeadYaw";
 
     bool servoing = true;
 
@@ -125,7 +142,9 @@ int main(int argc, const char* argv[])
     float lambda = 1.5; // 0.050;
     mat recordS;
     vpColVector vel(1);
-    AL::ALMemoryProxy memProxy(opt_ip, 9559);
+    //AL::ALMemoryProxy memProxy(opt_ip, 9559);
+
+    qi::AnyObject memProxy(session->service("ALMemory"));
 
     vpImage<unsigned char> I(320, 320);
     vpDisplayX dd(I);
@@ -152,12 +171,19 @@ int main(int argc, const char* argv[])
     float A=d_micro/c;
     float ell=1;
     double t;
+
     while (1)
     {
       std::cout << "----------------------------------" << std::endl;
       t = vpTime::measureTimeMs();
-      std::vector<float> left_= memProxy.getData("ALSoundProcessing/leftVec");
-      std::vector<float> right_= memProxy.getData("ALSoundProcessing/rightVec");
+      //std::vector<float> left_= memProxy.getData("ALSoundProcessing/leftVec");
+      //std::vector<float> right_= memProxy.getData("ALSoundProcessing/rightVec");
+      qi::AnyValue data_left = memProxy.call<qi::AnyValue>("getData", "ALSoundProcessing/leftVec");
+      qi::AnyValue data_right = memProxy.call<qi::AnyValue>("getData", "ALSoundProcessing/rightVec");
+
+      std::vector<float> left_ = fromAnyValueToFloatVector(data_left);
+      std::vector<float> right_ = fromAnyValueToFloatVector(data_right);
+
       mat stereoSignal=zeros(2,right_.size());
       for(int i=0;i<left_.size();i++){
         stereoSignal(0,i)=left_[i];
@@ -193,12 +219,7 @@ int main(int argc, const char* argv[])
       std::cout << "vel: " << vel << std::endl;
 
       if (servoing)
-      {
-        if (robot.getRobotType() == vpNaoqiRobot::Pepper)
           robot.setVelocity(names, vel_);
-        else if (robot.getRobotType() == vpNaoqiRobot::Romeo)
-          robot.setVelocity(jointName, vel);
-      }
 
       // Save current values
       loop_iter ++;
@@ -210,13 +231,8 @@ int main(int argc, const char* argv[])
 
     //   plotter->saveData(0, "ratio.dat");
 
-    if (robot.getRobotType() == vpNaoqiRobot::Pepper)
-    {
       robot.stop(jointName);
       robot.stopPepperControl();
-    }
-    else if (robot.getRobotType() == vpNaoqiRobot::Romeo)
-      robot.stop(jointName);
 
     vpDisplay::getClick(I, true);
     //plotter.saveData(0, "itdDense_C.dat");
@@ -225,10 +241,6 @@ int main(int argc, const char* argv[])
 
   }
   catch (const vpException &e)
-  {
-    std::cerr << "Caught exception: " << e.what() << std::endl;
-  }
-  catch (const AL::ALError &e)
   {
     std::cerr << "Caught exception: " << e.what() << std::endl;
   }
