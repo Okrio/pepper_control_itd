@@ -4,19 +4,16 @@
 
 * Get sound_grabber 
 * Install itpp: 
-  $ sudo apt-get install libitpp-dev 
-* Configure qibuild workspace and create toolchain: see [here](http://jokla.me/robotics/install-sdk-c-naoqi/)
-* Build [visp_naoqi](https://github.com/lagadic/visp_naoqi): see [here](http://jokla.me/robotics/visp_naoqi/) instruction
-* Clone `pepper_control_itd` in your qibuild workspace:    
+  `$ sudo apt-get install libitpp-dev` 
+* Build [visp_naoqi](https://github.com/lagadic/visp_naoqi): libqi branch
+* Clone `pepper_control_itd` in your workspace:  
   $ git clone https://github.com/lagadic/pepper_control_itd.git   
-* Configure project:   
-  ```$ configure --release -c  toolchain_2_4 -Dvisp_naoqi_DIR=/home/aly/workspace/visp_naoqi/build-pepper_2_4-release/sdk/cmake -DVISP_DIR=/home/gclaudio/software/visp-build```   
+* Checkout libqi branch
+* Build project   
 * Go in the build folder and `make`
 
-
-
 ## Usage
-$ `$ /home/aly/workspace/romeo_sound_processing/build-toolchain_romeo`   
-$ `$./sdk/bin/soundprocessing --pip 192.168.0.24 --pport 9559`   
-$ `./sdk/bin/itd_control --ip 192.168.0.24`   
+`$ cd /home/gclaudio/soft/robot_ws/al_sound_grabber`   
+`$./sdk/bin/al_sound_grabber --pip 192.168.0.24 --pport 9559`   
+`$ ./sdk/bin/itd_control --ip 192.168.0.24`   
 
