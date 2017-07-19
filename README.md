@@ -27,7 +27,7 @@
 * In one terminal run the sound grabber:
 
         $ cd $HOME/robot_ws/al_sound_grabber
-        $ ./sdk/bin/al_sound_grabber --pip 192.168.0.24 --pport 9559`
+        $ ./sdk/bin/al_sound_grabber --pip 192.168.0.24 --pport 9559
 
 * In a second terminal run the robot controller
 
