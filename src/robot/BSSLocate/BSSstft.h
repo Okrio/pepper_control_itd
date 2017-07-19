@@ -31,8 +31,8 @@
  *
  ****************************************************************************/
 
-#include <itpp/itbase.h>
 #include <itpp/base/sort.h>
+#include <itpp/itbase.h>
 #include <itpp/signal/transforms.h>
 using namespace itpp;
 /*% STFT_MULTI Multichannel short-time Fourier transform (STFT) using
@@ -57,13 +57,14 @@ using namespace itpp;
 % version 3 (http://www.gnu.org/licenses/gpl.txt)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 */
-class BSSstft{
+class BSSstft
+{
 private:
-int  nchan, nsampl, wlen, nfram, nbin;
-vec win, swin;
-mat s;
+  int nchan, nsampl, wlen, nfram, nbin;
+  vec win, swin;
+  mat s;
+
 public:
-  BSSstft(const int & len,const mat & sig);
-  const Vec<cmat> compute();
-  
+  BSSstft(const int &len, const mat &sig);
+  const Vec< cmat > compute();
 };

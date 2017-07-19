@@ -31,18 +31,18 @@
  *
  ****************************************************************************/
 
+#include "BSSstft.h"
+#include <cmath>
+#include <complex>
+#include <itpp/fixed/cfix.h>
 #include <itpp/itbase.h>
+#include <itpp/itsignal.h>
 #include <itpp/signal/transforms.h>
 #include <itpp/stat/misc_stat.h>
-#include <itpp/itsignal.h>
-#include <itpp/fixed/cfix.h>
-#include <complex>
-#include <cmath>
-#include "BSSstft.h"
 using namespace itpp;
 
 /*
- * 
+ *
 % BSS_LOCATE_SPEC Estimation of the source TDOAs in a stereo convolutive
 % mixture using an angular spectrum
 %
@@ -64,23 +64,26 @@ using namespace itpp;
 % spec: ngrid x 1 angular spectrum
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
- * 
+ *
  */
 
-class BSSlocate{
+class BSSlocate
+{
 private:
-int  nchan, nsampl, wlen, nsrc,fs;
-double d, c;
-vec f,grid,crossCorr;
-Vec<cmat> X;
+  int nchan, nsampl, wlen, nsrc, fs;
+  double d, c;
+  vec f, grid, crossCorr;
+  Vec< cmat > X;
 
 public:
   BSSlocate(const mat &sig, const double &dist, const int &freq);
   vec compute();
   vec getCC();
- private:
-  Vec<mat> nonLinSpec(const Vec<cmat>& X, const double & alpha,const vec & tau_grid);
+
+private:
+  Vec< mat > nonLinSpec(const Vec< cmat > &X, const double &alpha,
+                        const vec &tau_grid);
   const void findpeaks(const vec &x, vec *ind, vec *peak);
-  mat fastCSqrt(const mat & in);
+  mat fastCSqrt(const mat &in);
   vec getSpec();
 };
